@@ -1,1 +1,4 @@
 # fastapi_blog
+项目主要使用了FastAPI框架
+项目主要使用了peewee的orm
+主要需求是编写了一个后端的简单的博客
