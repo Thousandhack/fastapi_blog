@@ -10,14 +10,13 @@ from app.core.redis_app import redis_client
 from datetime import timedelta
 from app.core.config import settings
 
-
 router = APIRouter()
 
 
 @router.post('/register', response_model=CustomResponse[UserDetail], name='用户注册')
 def user_register(
-    *,
-    user_in: UserCreate,
+        *,
+        user_in: UserCreate,
 ):
     """
     注册用户
@@ -41,7 +40,7 @@ def user_register(
     return success_response(user)
 
 
-@router.post('/login',  response_model=CustomResponse[Token], name='用户登陆')
+@router.post('/login', response_model=CustomResponse[Token], name='用户登陆')
 def user_login(*, user_in: UserLogin):
     """
     用户登陆

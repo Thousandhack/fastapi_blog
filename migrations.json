@@ -1,0 +1,15 @@
+{
+  "prerun": "# some code here",
+  "directory": "migrations",
+  "history": "migratehistory",
+  "models": [
+    "app.models.user.User",
+    "app.models.blog.Blog",
+    "app.models.blog.Category",
+    "app.models.blog.Tag",
+    "app.models.blog.Article",
+    "app.models.blog.ArticleTag",
+    "app.models.blog.ArticleUpDown",
+    "app.models.blog.Comment"
+  ]
+}
