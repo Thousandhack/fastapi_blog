@@ -1,11 +1,10 @@
-
-
 from pydantic import BaseModel
+from pydantic import Field
 
 
 class Token(BaseModel):
-    access_token: str
-    token_type: str
+    access_token: str = Field(description='访问token')
+    token_type: str = Field(description='访问token的类型,默认bearer')
 
     class Config:
         schema_extra = {
