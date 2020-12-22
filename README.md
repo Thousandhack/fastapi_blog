@@ -71,6 +71,7 @@
 
 
 # 数据迁移的步骤
+```
 (fastapi_blog) root@hsz-virtual-machine:/opt/myproject/fastapi_blog# pem init
 Configuration file 'migrations.json' was created.
 (fastapi_blog) root@hsz-virtual-machine:/opt/myproject/fastapi_blog# pem add app.models.user.User
