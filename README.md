@@ -79,10 +79,13 @@ Model 'app.models.user.User' was added to watch list.
 (fastapi_blog) root@hsz-virtual-machine:/opt/myproject/fastapi_blog# pem watch
 Migration `0001_migration_202012041607` has been created.
 (fastapi_blog) root@hsz-virtual-machine:/opt/myproject/fastapi_blog# pem migrate
-
-
+```
+# 出现的一些问题的解决方法
+```
 # 问题 1
 "Changing sql mode 'NO_AUTO_CREATE_USER' is deprecated
 # 解决方法：
 set @@GLOBAL.sql_mode='';
 set sql_mode ='STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+```
+
