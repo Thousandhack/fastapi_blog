@@ -7,3 +7,14 @@ def fail_response(message):
         message=message
     )
     return JSONResponse(data)
+
+
+def success_response(data):
+    return {'status': 'success', 'data': data}
+
+# def success_response(data):
+#     result = dict(
+#         status="fail",
+#         data=data
+#     )
+#     return JSONResponse(result)
