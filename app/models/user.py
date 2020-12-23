@@ -1,4 +1,4 @@
-from peewee import Model, CharField, UUIDField, DateTimeField
+from peewee import Model, CharField, UUIDField, DateTimeField, IntegerField
 from passlib.context import CryptContext
 from app.db.database import database
 from uuid import uuid4
@@ -16,6 +16,7 @@ class User(Model):
     password_hash = CharField(max_length=128)
     created = DateTimeField(default=datetime.datetime.now, verbose_name='创建时间')
     email = CharField(max_length=128, null=True, verbose_name='电子邮箱')
+    user_type = IntegerField(default=1, verbose_name='1:博主，0：管理员')
     mobile = CharField(max_length=11, null=True, unique=True, verbose_name='手机号码')
     modified = DateTimeField(default=datetime.datetime.now, verbose_name='修改时间')
 
