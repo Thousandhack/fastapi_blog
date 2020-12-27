@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi import Query
 from fastapi import Path
 from app.models.user import User
-from app.models.blog import BlogSite, Category, Article
+from app.models.blog import BlogSite, Category, Article, ArticleUpDown, Comment
 from app.schemas.response import CustomResponse
+from app.schemas.blog import ArticleList, CreateArticle, ArticleInfo, UpdateArticle
 from app.schemas.blog import CreateBlogSite, CreateUserBlogSite, BlogSiteInfo, BlogSiteList, UpdateBlogSite
 from app.schemas.blog import CreateCategory, UpdateCategory, CategoryInfo
 from app.api.utils.response import fail_response, success_response
@@ -298,3 +299,249 @@ def delete_category(category_id: str, current_user: User = Depends(get_current_u
         logger.error(f'更新博客文章失败，失败原因：{e}')
         return fail_response('删除博客文章失败')
     return success_response('删除博客文章成功')
+
+
+@router.get('/category/{category_id}/article', response_model=CustomResponse[ArticleList], name="分类下博客文章列表")
+def get_article_list(
+        category_id: str = Path(0, description="博客分类id"),
+        page: int = Query(1, description='页码'),
+        page_size: int = Query(settings.PAGE_SIZE, description='每页条数'),
+        search: str = Query(None, description='查询参数'),
+        # start_time: datetime = Query(None, description='工单开始时间'),
+        # end_time: datetime = Query(None, description='工单结束时间'),
+):
+    try:
+        if category_id == '0':
+            category_id = None
+        if not search:
+            articles = Article.select().where(Article.category_id == category_id).order_by(Article.create_time.desc())
+        else:
+            # 法二：
+            articles = Article.select().where(
+                Article.category_id == category_id,
+                Article.title.contains(search) |
+                Article.desc.contains(search) |
+                Article.content.contains(search)).order_by(Article.create_time.desc())
+        # # 参数校验
+        # if (not start_time or not end_time) and (start_time or end_time):
+        #     return fail_response('时间错误')
+        # if start_time and end_time:
+        #     if start_time > end_time or (end_time - datetime.now()).total_seconds() > 24 * 60 * 60:
+        #         return fail_response('时间错误')
+        # if start_time and end_time:
+        #     articles = articles.where(Article.create_time >= start_time, Article.create_time <= end_time)
+        paginate_articles = articles.paginate(page, page_size)
+        paginate = {
+            'page': page,
+            'page_size': page_size,
+            'total': articles.count()
+        }
+        if not paginate_articles:
+            return success_response({
+                'paginate': paginate,
+                'product_list': []
+            })
+        article_list = [article.to_dict() for article in paginate_articles]
+        data = {
+            'paginate': paginate,
+            'article_list': article_list
+        }
+        return success_response(data)
+    except Exception as e:
+        logger.error(f'获取文章列表失败，失败原因：{e}')
+        return fail_response('获取文章列表失败')
+
+
+@router.get('/backend/article', response_model=CustomResponse[ArticleList], name="博客文章列表")
+def get_article_list(
+        page: int = Query(1, description='页码'),
+        page_size: int = Query(settings.PAGE_SIZE, description='每页条数'),
+        search: str = Query(None, description='查询参数'),
+        start_time: datetime = Query(None, description='工单开始时间'),
+        end_time: datetime = Query(None, description='工单结束时间'),
+):
+    try:
+        if not search:
+            articles = Article.select().order_by(Article.create_time.desc())
+        else:
+            # 法一：
+            # articles = Article.select().where(
+            #     Article.title % f'%{search}%' |
+            #     Article.desc % f'%{search}%' |
+            #     Article.content % f'%{search}%').order_by(Article.create_time.desc())
+            # 法二：
+            articles = Article.select().where(
+                Article.title.contains(search) |
+                Article.desc.contains(search) |
+                Article.content.contains(search)).order_by(Article.create_time.desc())
+        # 参数校验
+        if (not start_time or not end_time) and (start_time or end_time):
+            return fail_response('时间错误')
+        if start_time and end_time:
+            if start_time > end_time or (end_time - datetime.now()).total_seconds() > 24 * 60 * 60:
+                return fail_response('时间错误')
+        if start_time and end_time:
+            articles = articles.where(Article.create_time >= start_time, Article.create_time <= end_time)
+        paginate_articles = articles.paginate(page, page_size)
+        paginate = {
+            'page': page,
+            'page_size': page_size,
+            'total': articles.count()
+        }
+        if not paginate_articles:
+            return success_response({
+                'paginate': paginate,
+                'product_list': []
+            })
+        # 法一：
+        # article_list = []
+        # for article in paginate_articles:
+        #     article_list.append({
+        #         'id': article.id,
+        #         'title': article.title,
+        #         'desc': article.desc,
+        #         'content': article.content,
+        #         'create_time': str(article.create_time),
+        #         'update_time': str(article.update_time)
+        #     })
+        # 法二：（相应的模型需要加to_dict的方法）
+        # for article in paginate_articles:
+        #     article_list.append(article.to_dict())
+        # 法三:使用列表推导式
+        article_list = [article.to_dict() for article in paginate_articles]
+        data = {
+            'paginate': paginate,
+            'article_list': article_list
+        }
+
+        return success_response(data)
+    except Exception as e:
+        logger.error(f'获取文章列表失败，失败原因：{e}')
+        return fail_response('获取文章列表失败')
+
+
+@router.get('/backend/query_article', response_model=CustomResponse[ArticleList], name="博客文章列表按自己想要的字段搜索")
+def get_article_list(
+        page: int = Query(1, description='页码'),
+        page_size: int = Query(settings.PAGE_SIZE, description='每页条数'),
+        article_id: int = Query(None, description='文章ID'),
+        title: str = Query(None, description='文章标题'),
+        desc: str = Query(None, description='文章描述'),
+        content: str = Query(None, description='文章内容'),
+):
+    try:
+        article_query = Article.select()
+        if article_id:
+            article_query = article_query.where(Article.id.contains(article_id))
+        if title:
+            article_query = article_query.where(Article.title.contains(title))
+        if desc:
+            article_query = article_query.where(Article.desc.contains(desc))
+        if content:
+            article_query = article_query.where(Article.content.contains(content))
+        # paginate_articles = article_query.limit(page_size).offset((page-1)*page_size) # 得到的结果同下
+        paginate_articles = article_query.paginate(page, page_size)
+        paginate = {
+            'page': page,
+            'page_size': page_size,
+            'total': article_query.count()
+        }
+        if not paginate_articles:
+            return success_response({
+                'paginate': paginate,
+                'product_list': []
+            })
+        article_list = [article.to_dict() for article in paginate_articles]
+        data = {
+            'paginate': paginate,
+            'article_list': article_list
+        }
+
+        return success_response(data)
+    except Exception as e:
+        logger.error(f'获取文章列表失败，失败原因：{e}')
+        return fail_response('获取文章列表失败')
+
+
+@router.post('/user/article', name="创建博客文章")
+@db.atomic()
+def create_article(*, new_article: CreateArticle,
+                   current_user: User = Depends(get_current_user)):
+    title = new_article.title
+    desc = new_article.desc
+    content = new_article.content
+    category_id = new_article.category_id
+    article = Article.filter(Article.user_id == current_user.uuid).first()
+    if article:
+        fail_response("您的博客文章已创建,不能重复创建")
+    try:
+        new_article = Article.create(title=title,
+                                     desc=desc,
+                                     content=content,
+                                     user_id=current_user.uuid,
+                                     category_id=category_id)
+        print(new_article.title)
+    except Exception as e:
+        db.rollback()
+        logger.error(f'创建博客文章失败，失败原因：{e}')
+        return fail_response('创建博客文章失败')
+    return success_response('创建博客文章成功')
+
+
+@router.get('/article/{article_id}', response_model=CustomResponse[ArticleInfo], name="博客文章详情展示")
+def get_article_info(article_id: str):
+    article = Article.filter(Article.id == article_id).first()
+    if article:
+        redis_client.incr('article_id:%s' % article_id)
+        page_view = redis_client.get('article_id:%s' % article_id)
+        data = {"title": article.title,
+                "desc": article.desc,
+                "content": article.content,
+                "create_time": str(article.create_time),
+                "update_time": str(article.update_time),
+                "page_view": page_view}
+
+        return success_response(data)
+    return fail_response("文章不存在")
+
+
+@router.put('/article/{article_id}', name="修改博客文章")
+@db.atomic()
+def update_article(article_id: str,
+                   new_article: UpdateArticle,
+                   current_user: User = Depends(get_current_user)):
+    title = new_article.title
+    desc = new_article.desc
+    content = new_article.content
+    category_id = new_article.category_id
+    article = Article.filter(Article.id == article_id, Article.user_id == current_user.uuid).first()
+    if not article:
+        return fail_response('此文章不存在')
+    try:
+        query = Article.update(title=title, desc=desc, content=content, category_id=category_id,
+                               update_time=str(datetime.now)).where(
+            Article.id == article_id, Article.user_id == current_user.uuid)
+        query.execute()
+        return success_response('更新博客文章成功')
+    except Exception as e:
+        db.rollback()
+        logger.error(f'更新博客文章失败，失败原因：{e}')
+        return fail_response('更新博客文章失败')
+
+
+@router.delete('/article/{article_id}', name="删除博客文章")
+@db.atomic()
+def delete_article(article_id: str,
+                   current_user: User = Depends(get_current_user)):
+    article = Article.filter(Article.id == article_id, Article.user_id == current_user.uuid).first()
+    if not article:
+        return fail_response('此文章不存在')
+    try:
+        result = article.delete_instance()
+        if result:
+            return success_response('删除博客文章成功')
+        return fail_response('更新博客文章失败')
+    except Exception as e:
+        db.rollback()
+        logger.error(f'更新博客文章失败，失败原因：{e}')
+        return fail_response('删除博客文章失败')

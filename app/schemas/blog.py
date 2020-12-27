@@ -126,3 +126,68 @@ class CategoryInfo(BaseModel):
     # blog_id: str = Field(description="关联字段站点ID")
     create_time: str = Field(description="创建时间")
     update_time: str = Field(description="更新时间")
+
+
+class ArticleListData(BaseModel):
+    id: int = Field(description="文章id")
+    title: str = Field(description="文章标题")
+    desc: str = Field(description="文章描述")
+    content: str = Field(description="文章内容")
+    create_time: str = Field(description="创建时间")
+    update_time: str = Field(description="更新时间")
+
+
+class ArticleList(BaseModel):
+    paginate: Paginate = dict()
+    article_list: List[ArticleListData] = []
+
+
+class QueryList(BaseModel):
+    id: int = Field(description="文章id")
+    title: str = Field(description="文章标题")
+    desc: str = Field(description="文章描述")
+    content: str = Field(description="文章内容")
+
+
+class CreateArticle(BaseModel):
+    title: str = Field(..., min_length=2, max_length=50, description='文字标题')
+    desc: str = Field(..., min_length=2, max_length=255, description='文字标题')
+    content: str = Field(..., description='文字内容')
+    category_id: int = Field(None, description="博客分类ID")
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "title": "测试的第一篇博客文章",
+                "desc": "这个是测试的第一篇文字的描述，主要用于测试使用",
+                "content": "本篇文章主要用于测试，这个是测试的内容",
+                "category_id": 4
+            }
+        }
+
+
+class ArticleInfo(BaseModel):
+    title: str = Field(..., description='文字标题')
+    desc: str = Field(..., description='文字标题')
+    content: str = Field(..., description='文字内容')
+    create_time: str = Field(..., description="创建时间")
+    update_time: str = Field(..., description="更新时间时间")
+    page_view: int = Field(..., description="文章访问量")
+
+
+class UpdateArticle(BaseModel):
+    title: str = Field(..., min_length=2, max_length=50, description='文字标题')
+    desc: str = Field(..., min_length=2, max_length=255, description='文字标题')
+    content: str = Field(..., description='文字内容')
+    category_id: int = Field(None, description="博客分类ID")
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "title": "测试的第一篇博客文章修改了",
+                "desc": "这个是测试的第一篇文字的描述，主要用于测试使用",
+                "content": "本篇文章主要用于测试，这个是测试的内容",
+                "category_id": 4
+            }
+        }
+
