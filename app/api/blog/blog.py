@@ -6,14 +6,18 @@ from app.models.blog import BlogSite, Category, Article, ArticleUpDown, Comment
 from app.schemas.response import CustomResponse
 from app.schemas.blog import ArticleList, CreateArticle, ArticleInfo, UpdateArticle
 from app.schemas.blog import CreateBlogSite, CreateUserBlogSite, BlogSiteInfo, BlogSiteList, UpdateBlogSite
-from app.schemas.blog import CreateCategory, UpdateCategory, CategoryInfo
+from app.schemas.blog import CreateCategory, UpdateCategory, CategoryInfo, CreateComment
+from app.schemas.blog import UpDown
 from app.api.utils.response import fail_response, success_response
 from app.api.utils.security import get_current_user, get_current_superuser
+from app.core.redis_app import redis_client
 from app.core.config import settings
 from fastapi.logger import logger
 from app.db.database import database as db
 from datetime import datetime
-
+import random
+import json
+import re
 
 router = APIRouter()
 
@@ -545,3 +549,188 @@ def delete_article(article_id: str,
         db.rollback()
         logger.error(f'更新博客文章失败，失败原因：{e}')
         return fail_response('删除博客文章失败')
+
+
+@router.get('/article/{article_id}/like_count', name="某博客文章统计点赞数可放到博客详情")
+def get_article_info(article_id: str):
+    article = Article.filter(Article.id == article_id).first()
+    if not article:
+        return fail_response('此文章不存在')
+    try:
+        up_count = ArticleUpDown.filter(ArticleUpDown.article_id == article.id, ArticleUpDown.is_up == True).count()
+    except Exception as e:
+        db.rollback()
+        logger.error(f'更新博客文章失败，失败原因：{e}')
+        return fail_response('删除博客文章失败')
+    return success_response({"article_id": article_id,
+                             "up_count": up_count})
+
+
+@router.get('/article/{article_id}/like_record', name="用户查看自己某篇博客文章点赞记录")
+def get_article_up_count(article_id: str,
+                         current_user: User = Depends(get_current_user)):
+    article = Article.filter(Article.id == article_id, Article.user_id == current_user).first()
+    if not article:
+        return fail_response('此文章不存在')
+    try:
+        article_likes = ArticleUpDown.filter(ArticleUpDown.article_id == article.id, ArticleUpDown.is_up == True)
+        user_list = [article_like.user_id.username for article_like in article_likes]
+        up_count = article_likes.count()
+    except Exception as e:
+        db.rollback()
+        logger.error(f'更新博客文章失败，失败原因：{e}')
+        return fail_response('删除博客文章失败')
+    return success_response({"user_list": user_list,
+                             "up_count": up_count})
+
+
+@router.post('/article/{article_id}/like', name="用户给博客文章点赞")
+def article_up(article_id: str,
+               up_down: UpDown,
+               current_user: User = Depends(get_current_user)):
+    is_up = up_down.is_up
+    article = Article.filter(Article.id == article_id).first()
+    if not article:
+        return fail_response('此文章不存在')
+    article_like = ArticleUpDown.filter(ArticleUpDown.user_id == current_user.uuid,
+                                        ArticleUpDown.article_id == article_id).first()
+    if article_like and article_like.is_up == is_up:
+        pass
+    elif article_like and article_like.is_up != is_up:
+        article_like.is_up = is_up
+        article_like.save()
+    else:
+        try:
+            ArticleUpDown.create(user_id=current_user, article_id=article, is_up=is_up)
+        except Exception as e:
+            db.rollback()
+            logger.error(f'点赞操作失败，失败原因：{e}')
+            return fail_response('点赞操作失败')
+    return success_response('操作成功成功')
+
+
+@router.put('/article/{article_id}/like', name="用户给博客文章点赞取消")
+def article_down(article_id: str,
+                 up_down: UpDown,
+                 current_user: User = Depends(get_current_user)):
+    is_up = up_down.is_up
+    article = Article.filter(Article.id == article_id).first()
+    if not article:
+        return fail_response('此文章不存在')
+    article_like = ArticleUpDown.filter(ArticleUpDown.user_id == current_user.uuid,
+                                        ArticleUpDown.article_id == article_id).first()
+    if article_like and article_like.is_up == is_up:
+        pass
+    elif article_like and article_like.is_up != is_up:
+        article_like.is_up = is_up
+        article_like.save()
+    else:
+        return fail_response('点赞操作失败')
+    return success_response('点赞操作成功')
+
+
+@router.get('/article/{article_id}/comments', name="某篇博客文章评论列表")
+def get_comment_list(article_id: str):
+    article = Article.filter(Article.id == article_id).first()
+    if not article:
+        return fail_response('此文章不存在')
+    comment_query = Comment.select().order_by(Comment.create_time.desc())
+    count = comment_query.count()
+    comment_list = [comment.to_dict() for comment in comment_query]
+    return success_response({"count": count,
+                             "comment_list": comment_list})
+
+
+@router.post('/article/{article_id}/comment', name="用户给某篇博客文章评论")
+@db.atomic()
+def add_comment(create_comment: CreateComment,
+                article_id: str = Path(2, description="博客文章id"),
+                current_user: User = Depends(get_current_user)):
+    content = create_comment.content
+    article = Article.filter(Article.id == article_id).first()
+    if not article:
+        return fail_response('此文章不存在')
+    try:
+        Comment.create(article_id=article_id, user_id=current_user.uuid, content=content, parent_id=None)
+    except Exception as e:
+        db.rollback()
+        logger.error(f'博客文章评论失败，失败原因：{e}')
+        return fail_response('删除博客文章失败')
+    return success_response('新增评论成功！')
+
+
+@router.put('/article/{article_id}/comment/{comment_id}', name="用户修改给某篇文章评论")
+@db.atomic()
+def update_comment(article_id: str,
+                   comment_id: str,
+                   create_comment: CreateComment,
+                   current_user: User = Depends(get_current_user)):
+    content = create_comment.content
+    article = Article.filter(Article.id == article_id).first()
+    if not article:
+        return fail_response('此文章不存在')
+    comment = Comment.filter(Comment.article_id == article_id, Comment.id == comment_id,
+                             Comment.user_id == current_user.uuid).first()
+    if not comment:
+        return fail_response('此评论不存在')
+    try:
+        comment.content = content
+        comment.save()
+    except Exception as e:
+        db.rollback()
+        logger.error(f'博客文章评论修改失败，失败原因：{e}')
+        return fail_response('博客文章评论修改失败！')
+    return success_response('博客文章评论修改成功！')
+
+
+@router.delete('/article/{article_id}/comment/{comment_id}', name="用户删除给某篇文章评论")
+@db.atomic()
+def delete_comment(article_id: str,
+                   comment_id: str,
+                   current_user: User = Depends(get_current_user)):
+    article = Article.filter(Article.id == article_id).first()
+    if not article:
+        return fail_response('此文章不存在')
+    comment = Comment.filter(Comment.article_id == article_id, Comment.id == comment_id,
+                             Comment.user_id == current_user.uuid).first()
+    if not comment:
+        return fail_response('此评论不存在或你没有删除权限')
+    try:
+        result = comment.delete_instance()
+        if not result:
+            return fail_response('删除评论失败')
+    except Exception as e:
+        db.rollback()
+        logger.error(f'删除评论失败失败，失败原因：{e}')
+        return fail_response('删除评论失败！')
+    return success_response('删除评论成功！')
+
+
+@router.post('/article/{article_id}/comment/{comment_id}', name="用户给某篇博客回复评论")
+@db.atomic()
+def reply_comment(create_comment: CreateComment,
+                  article_id: str = Path(2, description="博客文章id"),
+                  comment_id: str = Path(2, description="评论id"),
+                  current_user: User = Depends(get_current_user)):
+    content = create_comment.content
+    article = Article.filter(Article.id == article_id).first()
+    if not article:
+        return fail_response('此文章不存在')
+    if article.user_id == current_user.uuid:
+        # 博主的情况
+        comment = Comment.filter(Comment.id == comment_id, Comment.article_id == article_id,
+                                 Comment.user_id != current_user.uuid).first()
+    else:
+        # 用户
+        comment = Comment.filter(Comment.id == comment_id, Comment.article_id == article_id,
+                                 Comment.user_id != current_user.uuid,
+                                 Comment.parent_id != '').first()
+    if not comment:
+        return fail_response('此评论不存在或原评论你不能进行回复！')
+    try:
+        Comment.create(article_id=article_id, user_id=current_user.uuid, content=content, parent_id=comment.id)
+    except Exception as e:
+        db.rollback()
+        logger.error(f'评论回复失败，失败原因：{e}')
+        return fail_response('评论回复失败')
+    return success_response('评论回复成功！')

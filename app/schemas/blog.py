@@ -92,7 +92,7 @@ class BlogSiteList(BaseModel):
 
 class UpdateBlogSite(CreateBlogSite):
     pass
-
+# 到这
 
 class CreateCategory(BaseModel):
     title: str = Field(description="分类标题")
@@ -191,3 +191,21 @@ class UpdateArticle(BaseModel):
             }
         }
 
+
+class UpDown(BaseModel):
+    is_up: bool = Field(..., description='点赞 true 为赞 false为取消')
+
+
+class ChangeUpDown(BaseModel):
+    is_up: bool = Field(False, description='点赞 true 为赞 false为取消')
+
+
+class CreateComment(BaseModel):
+    content: str = Field(..., min_length=2, max_length=128, description='评论内容')
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "content": "文章写的非常好，666！",
+            }
+        }
