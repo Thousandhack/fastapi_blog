@@ -92,3 +92,37 @@ class BlogSiteList(BaseModel):
 
 class UpdateBlogSite(CreateBlogSite):
     pass
+
+
+class CreateCategory(BaseModel):
+    title: str = Field(description="分类标题")
+    description: str = Field(description="分类描述")
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "title": "python",
+                "description": "python学习的分类",
+            }
+        }
+
+
+class UpdateCategory(CreateCategory):
+    pass
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "title": "python修改后",
+                "description": "python学习的分类修改后",
+            }
+        }
+
+
+class CategoryInfo(BaseModel):
+    id: str = Field(description="分类ID")
+    title: str = Field(description="分类标题")
+    description: str = Field(description="分类描述")
+    # blog_id: str = Field(description="关联字段站点ID")
+    create_time: str = Field(description="创建时间")
+    update_time: str = Field(description="更新时间")

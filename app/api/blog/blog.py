@@ -1,15 +1,18 @@
 from fastapi import APIRouter, Depends
+from fastapi import Query
 from fastapi import Path
 from app.models.user import User
-from app.models.blog import BlogSite
+from app.models.blog import BlogSite, Category, Article
 from app.schemas.response import CustomResponse
 from app.schemas.blog import CreateBlogSite, CreateUserBlogSite, BlogSiteInfo, BlogSiteList, UpdateBlogSite
+from app.schemas.blog import CreateCategory, UpdateCategory, CategoryInfo
 from app.api.utils.response import fail_response, success_response
 from app.api.utils.security import get_current_user, get_current_superuser
 from app.core.config import settings
 from fastapi.logger import logger
 from app.db.database import database as db
 from datetime import datetime
+
 
 router = APIRouter()
 
@@ -152,6 +155,143 @@ def delete_blog_site(site_id: int = Path(..., title="站点ID"),
     try:
         result = blog_site.delete_instance()
         if not result:
+            return fail_response('更新博客文章失败')
+    except Exception as e:
+        db.rollback()
+        logger.error(f'更新博客文章失败，失败原因：{e}')
+        return fail_response('删除博客文章失败')
+    return success_response('删除博客文章成功')
+
+
+@router.get('/category', name="个人博客分类列表")  # ,response_model=CustomResponse[CategoryList]
+def get_category_list(page: int = Query(1, description='页码'),
+                      page_size: int = Query(settings.PAGE_SIZE, description='每页条数'),
+                      search: str = Query(None, description='查询参数'),
+                      current_user: User = Depends(get_current_user)):
+    try:
+        blog_site = BlogSite.filter(BlogSite.user_id == current_user.uuid).first()
+        if blog_site is None:
+            return fail_response('此用户未创建博客站点，请先创建')
+        if not search:
+            categories = Category.select().where(Category.blog_id == blog_site.id).order_by(Category.create_time.desc())
+        else:
+            categories = Category.select().where(
+                Category.blog_id == blog_site.id,
+                Category.title % f'%{search}%' |
+                Category.description % f'%{search}%'
+            ).order_by(Category.create_time.desc())
+        paginate_categories = categories.paginate(page, page_size)
+        paginate = {
+            'page': page,
+            'page_size': page_size,
+            'total': categories.count()
+        }
+        category_list = []
+        if not paginate_categories:
+            return success_response({
+                'paginate': paginate,
+                'product_list': []
+            })
+        for category in paginate_categories:
+            category_list.append(category.to_dict())
+        data = {
+            'paginate': paginate,
+            'article_list': category_list
+        }
+    except Exception as e:
+        logger.error(f'获取文章列表失败，失败原因：{e}')
+        return fail_response('获取文章列表失败')
+    return success_response(data)
+
+
+@router.post('/category', name="个人创建博客分类")
+@db.atomic()
+def create_category(*, new_category: CreateCategory, current_user: User = Depends(get_current_user)):
+    title = new_category.title
+    description = new_category.description
+    blog_site = BlogSite.filter(BlogSite.user_id == current_user.uuid).first()
+    if blog_site is None:
+        return fail_response('此用户未创建博客站点，请先创建')
+    category = Category.filter(Category.title == title, Category.blog_id == blog_site.id).first()
+    if category:
+        return fail_response("相同分类已存在！")
+    try:
+        Category.create(title=title,
+                        description=description,
+                        blog_id=blog_site.id)
+    except Exception as e:
+        db.rollback()
+        logger.error(f'创建博客文章失败，失败原因：{e}')
+        return fail_response('创建博客文章失败')
+    return success_response('创建博客文章成功')
+
+
+@router.get('/category/{category_id}', response_model=CustomResponse[CategoryInfo], name="个人查看博客分类详情")
+def get_category_info(category_id: str, current_user: User = Depends(get_current_user)):
+    blog_site = BlogSite.filter(BlogSite.user_id == current_user.uuid).first()
+    if blog_site is None:
+        return fail_response('此用户未创建博客站点，请先创建')
+    category = Category.filter(Category.id == category_id, Category.blog_id == blog_site.id).first()
+    if category is None:
+        return fail_response("博客分类不存在")
+    return success_response(category.to_dict())
+
+
+@router.put('/category/{category_id}', name="个人修改博客分类")  # , response_model=CustomResponse[CategoryInfo]
+@db.atomic()
+def get_category_info(category_id: str, up_category: UpdateCategory, current_user: User = Depends(get_current_user)):
+    blog_site = BlogSite.filter(BlogSite.user_id == current_user.uuid).first()
+    if blog_site is None:
+        return fail_response('此用户未创建博客站点，请先创建')
+    category = Category.filter(Category.id == category_id, Category.blog_id == blog_site.id).first()
+    if not category:
+        return fail_response("博客分类不存在")
+    try:
+        query = Category.update(title=up_category.title, description=up_category.description,
+                                update_time=str(datetime.now)).where(
+            Category.id == category_id, Category.blog_id == blog_site.id)
+        query.execute()
+        return success_response('更新博客分类成功')
+    except Exception as e:
+        db.rollback()
+        logger.error(f'更新博客分类失败，失败原因：{e}')
+        return fail_response('更新博客分类失败')
+
+
+@router.delete('/category/{category_id}', name="个人删除博客分类")  # , response_model=CustomResponse[CategoryInfo]
+@db.atomic()
+def delete_category(category_id: str, current_user: User = Depends(get_current_user)):
+    # 法一：
+    # blog_site = BlogSite.filter(BlogSite.user_id == current_user.uuid).first()
+    # if blog_site is None:
+    #     return fail_response('此用户未创建博客站点，请先创建')
+    # category = Category.filter(Category.id == category_id, Category.blog_id == blog_site.id).first()
+    # if not category:
+    #     return fail_response("博客分类不存在")
+    # try:
+    #     result = category.delete_instance()
+    #     if result:
+    #         return success_response('删除博客文章成功')
+    #     return fail_response('更新博客文章失败')
+    # except Exception as e:
+    #     db.rollback()
+    #     logger.error(f'更新博客文章失败，失败原因：{e}')
+    #     return fail_response('删除博客文章失败')
+    # 法二：使用联表查询的方式
+    category = Category.select().join(BlogSite, on=(Category.blog_id == BlogSite.id)).where(
+        BlogSite.user_id == current_user.uuid, Category.id == category_id)
+    if not category:
+        return fail_response("博客分类不存在")
+    try:
+        # 先将这个用户下这个分类的文章的分类改为空值
+        articles = Article.filter(Article.category_id == category_id)
+        for article in articles:
+            article.category_id = None
+            article.save()
+        # 再将这个文章分类删掉
+        query = Category.delete().where(Category.id == category_id)
+        result = query.execute()  # 删除成功返回 1  所以不等于1为失败
+        if result != 1:
             return fail_response('更新博客文章失败')
     except Exception as e:
         db.rollback()
