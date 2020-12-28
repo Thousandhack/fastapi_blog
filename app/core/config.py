@@ -10,7 +10,7 @@ class GlobalSettings(BaseSettings):
 
     SECRET_KEY = 'af9e8e26914d49873a226849d58195fbd8e79d538ec9ed37e0c15827c1971f09'
 
-    PROJECT_NAME = 'PhoenixV1.0'
+    PROJECT_NAME = 'Blog_V1.0'
 
     DATABASE_POOL_SIZE = 20
 

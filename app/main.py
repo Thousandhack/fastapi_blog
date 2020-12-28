@@ -39,4 +39,6 @@ if __name__ != '__main__':
     gunicorn_logger = logging.getLogger('gunicorn.error')
     logger.handlers = gunicorn_logger.handlers
     logger.setLevel(gunicorn_logger.level)
+    # uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
 
