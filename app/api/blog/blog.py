@@ -3,6 +3,7 @@ from fastapi import Query
 from fastapi import Path
 from fastapi import File
 from fastapi import UploadFile
+from starlette.responses import FileResponse
 from app.models.user import User
 from app.models.blog import BlogSite, Category, Article, ArticleUpDown, Comment
 from app.schemas.response import CustomResponse
@@ -515,6 +516,18 @@ async def create_upload_file(
     return {
         "picture_url": picture_url,
     }
+
+
+@router.get('/article/picture_url/{picture_name}', name="博客图片url获取")
+async def get_picture(picture_name: str):
+    # 保存上传的文件
+    # print(settings.BASE_DIR + settings.PICTURE_DIR, "123456")
+    # picture_url = settings.BASE_DIR + settings.PICTURE_DIR + "test.png"
+    if picture_name:
+        picture_url = settings.BASE_DIR + settings.PICTURE_DIR + picture_name
+        return FileResponse(picture_url, media_type="image/png")
+    else:
+        return fail_response("没有相关图片")
 
 
 @router.get('/article/{article_id}', response_model=CustomResponse[ArticleInfo], name="博客文章详情展示")
