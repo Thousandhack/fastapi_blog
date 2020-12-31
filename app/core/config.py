@@ -20,6 +20,8 @@ class GlobalSettings(BaseSettings):
 
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+    ALLOWED_EXTENSIONS = ['png', 'jpg', 'JPG', 'PNG']
+
     class Config:
         case_sensitive = True
 

@@ -500,19 +500,17 @@ async def create_upload_file(
         file: UploadFile = File(...),
 ):
     filename = file.filename
-    # ALLOWED_EXTENSIONS = set('png', 'jpg', 'JPG', 'PNG')
-    # and filename.rsplit('.', 1)[1] not in ALLOWED_EXTENSIONS
-    if '.' not in filename:
-        fail_response("图片格式不正确")
+    if '.' not in filename or filename.rsplit('.', 1)[1] not in settings.ALLOWED_EXTENSIONS:
+        return fail_response("图片格式不正确")
     # 保存上传的文件
     contents = await file.read()
     now_time = datetime.now().strftime("%Y%m%d%H%M%S")
     random_num = random.randint(0, 100)
     ext = filename.rsplit('.', 1)[1]
-    picture_name = settings.BASE_DIR + settings.PICTURE_DIR + now_time + "_" + str(random_num) + ext
+    picture_name = settings.BASE_DIR + settings.PICTURE_DIR + now_time + "_" + str(random_num) + "." + ext
     with open(picture_name, "wb") as f:
         f.write(contents)
-    picture_url = "/api/v1.0/blog/article/picture_url/" + now_time + "_" + str(random_num) + ext
+    picture_url = "/api/v1.0/blog/article/picture_url/" + now_time + "_" + str(random_num) + "." + ext
     return {
         "picture_url": picture_url,
     }
@@ -521,8 +519,6 @@ async def create_upload_file(
 @router.get('/article/picture_url/{picture_name}', name="博客图片url获取")
 async def get_picture(picture_name: str):
     # 保存上传的文件
-    # print(settings.BASE_DIR + settings.PICTURE_DIR, "123456")
-    # picture_url = settings.BASE_DIR + settings.PICTURE_DIR + "test.png"
     if picture_name:
         picture_url = settings.BASE_DIR + settings.PICTURE_DIR + picture_name
         return FileResponse(picture_url, media_type="image/png")
