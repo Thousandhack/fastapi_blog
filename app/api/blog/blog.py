@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi import Query
 from fastapi import Path
+from fastapi import File
+from fastapi import UploadFile
 from app.models.user import User
 from app.models.blog import BlogSite, Category, Article, ArticleUpDown, Comment
 from app.schemas.response import CustomResponse
@@ -484,12 +486,35 @@ def create_article(*, new_article: CreateArticle,
                                      content=content,
                                      user_id=current_user.uuid,
                                      category_id=category_id)
-        print(new_article.title)
+        # print(new_article.title)
     except Exception as e:
         db.rollback()
         logger.error(f'创建博客文章失败，失败原因：{e}')
         return fail_response('创建博客文章失败')
     return success_response('创建博客文章成功')
+
+
+@router.post('/article/upload_picture', name="博客图片上传")
+async def create_upload_file(
+        file: UploadFile = File(...),
+):
+    filename = file.filename
+    # ALLOWED_EXTENSIONS = set('png', 'jpg', 'JPG', 'PNG')
+    # and filename.rsplit('.', 1)[1] not in ALLOWED_EXTENSIONS
+    if '.' not in filename:
+        fail_response("图片格式不正确")
+    # 保存上传的文件
+    contents = await file.read()
+    now_time = datetime.now().strftime("%Y%m%d%H%M%S")
+    random_num = random.randint(0, 100)
+    ext = filename.rsplit('.', 1)[1]
+    picture_name = settings.BASE_DIR + settings.PICTURE_DIR + now_time + "_" + str(random_num) + ext
+    with open(picture_name, "wb") as f:
+        f.write(contents)
+    picture_url = "/api/v1.0/blog/article/picture_url/" + now_time + "_" + str(random_num) + ext
+    return {
+        "picture_url": picture_url,
+    }
 
 
 @router.get('/article/{article_id}', response_model=CustomResponse[ArticleInfo], name="博客文章详情展示")

@@ -6,13 +6,19 @@ import os
 class GlobalSettings(BaseSettings):
     API_V1_STR: str = '/api/v1.0'
 
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 4
+    PICTURE_DIR: str = '/media/pictures/'
 
-    SECRET_KEY = 'af9e8e26914d49873a226849d58195fbd8e79d538ec9ed37e0c15827c1971f09'
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 4  # 访问token过期时间
 
-    PROJECT_NAME = 'Blog_V1.0'
+    SECRET_KEY = 'dq32tb234249873a226849d58195fbd8e79d538ec9ed37e0c15827c1971f09'
+
+    PROJECT_NAME = 'BlogV1.0'
 
     DATABASE_POOL_SIZE = 20
+
+    PAGE_SIZE = 10
+
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     class Config:
         case_sensitive = True
