@@ -68,7 +68,7 @@ class UserLogin(BaseModel):
                 "username": "testuser01",
                 "email": "testuser01@example.com",
                 "mobile": "18666666666",
-                "password": "testuser001password"
+                "password": "testuser01password"
             }
         }
 

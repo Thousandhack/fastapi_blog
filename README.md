@@ -92,3 +92,6 @@ set @@GLOBAL.sql_mode='';
 set sql_mode ='STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
 ```
 
+# redis 密码设置
+127.0.0.1:6379> config set requirepass 123456
+

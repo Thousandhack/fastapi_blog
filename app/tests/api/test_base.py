@@ -20,8 +20,8 @@ password: str = generate_random_password()
 
 def test_login_with_username():
     server_api = get_server_api()
-    payload = {'username': username, 'password': password}
-    response = requests.post(f'{server_api}/login', data=json.dumps(payload))
+    payload = {'username': "testuser01", 'password': "testuser01password"}
+    response = requests.post(f'{server_api}/auth/login', data=json.dumps(payload))
     content = response.json()
     assert response.status_code == 200
     assert content['status'] == 'success'
@@ -30,7 +30,6 @@ def test_login_with_username():
     assert 'access_token' in content['data']
     global access_token
     access_token = content['data']['access_token']
-
 
 # def test_user_profile():
 #     server_api = get_server_api()
@@ -43,6 +42,3 @@ def test_login_with_username():
 #     assert 'username' in content['data']
 #     assert 'email' in content['data']
 #     assert 'mobile' in content['data']
-
-
-
