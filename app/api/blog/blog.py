@@ -62,8 +62,8 @@ def get_blog_sites(page: int = Query(1, description='页码'),
         }
         return success_response(data)
     except Exception as e:
-        logger.error(f'获取文章列表失败，失败原因：{e}')
-        return fail_response('获取文章列表失败')
+        logger.error(f'获取博客站点列表失败，失败原因：{e}')
+        return fail_response('获取博客站点列表失败')
 
 
 @router.post('/user/blog_site', name="个人创建博客站点")
@@ -207,8 +207,8 @@ def get_category_list(page: int = Query(1, description='页码'),
             'article_list': category_list
         }
     except Exception as e:
-        logger.error(f'获取文章列表失败，失败原因：{e}')
-        return fail_response('获取文章列表失败')
+        logger.error(f'获取个人博客分类列表失败，失败原因：{e}')
+        return fail_response('获取个人博客分类列表失败')
     return success_response(data)
 
 
@@ -487,7 +487,7 @@ def create_article(*, new_article: CreateArticle,
                                      content=content,
                                      user_id=current_user.uuid,
                                      category_id=category_id)
-        # print(new_article.title)
+        print(new_article.title)
     except Exception as e:
         db.rollback()
         logger.error(f'创建博客文章失败，失败原因：{e}')
@@ -500,17 +500,19 @@ async def create_upload_file(
         file: UploadFile = File(...),
 ):
     filename = file.filename
-    if '.' not in filename or filename.rsplit('.', 1)[1] not in settings.ALLOWED_EXTENSIONS:
-        return fail_response("图片格式不正确")
+    # ALLOWED_EXTENSIONS = set('png', 'jpg', 'JPG', 'PNG')
+    # and filename.rsplit('.', 1)[1] not in ALLOWED_EXTENSIONS
+    if '.' not in filename:
+        fail_response("图片格式不正确")
     # 保存上传的文件
     contents = await file.read()
     now_time = datetime.now().strftime("%Y%m%d%H%M%S")
     random_num = random.randint(0, 100)
     ext = filename.rsplit('.', 1)[1]
-    picture_name = settings.BASE_DIR + settings.PICTURE_DIR + now_time + "_" + str(random_num) + "." + ext
+    picture_name = settings.BASE_DIR + settings.PICTURE_DIR + now_time + "_" + str(random_num) + ext
     with open(picture_name, "wb") as f:
         f.write(contents)
-    picture_url = "/api/v1.0/blog/article/picture_url/" + now_time + "_" + str(random_num) + "." + ext
+    picture_url = "/api/v1.0/blog/article/picture_url/" + now_time + "_" + str(random_num) + ext
     return {
         "picture_url": picture_url,
     }
@@ -519,6 +521,8 @@ async def create_upload_file(
 @router.get('/article/picture_url/{picture_name}', name="博客图片url获取")
 async def get_picture(picture_name: str):
     # 保存上传的文件
+    # print(settings.BASE_DIR + settings.PICTURE_DIR, "123456")
+    # picture_url = settings.BASE_DIR + settings.PICTURE_DIR + "test.png"
     if picture_name:
         picture_url = settings.BASE_DIR + settings.PICTURE_DIR + picture_name
         return FileResponse(picture_url, media_type="image/png")
@@ -528,10 +532,31 @@ async def get_picture(picture_name: str):
 
 @router.get('/article/{article_id}', response_model=CustomResponse[ArticleInfo], name="博客文章详情展示")
 def get_article_info(article_id: str):
-    article = Article.filter(Article.id == article_id).first()
+    """
+    在排行榜这款  需要把 标题也存进去
+    :param article_id:
+    :return:
+    """
+    article = Article.filter(Article.is_delete == 0, Article.id == article_id).first()
     if article:
-        redis_client.incr('article_id:%s' % article_id)
-        page_view = redis_client.get('article_id:%s' % article_id)
+        title = article.title
+        res = redis_client.exists("article_rank_list")
+        if not res:
+            # 连有序集合都没有的情况 初始化分数
+            redis_client.zadd("article_rank_list", {"article_%s_%s" % (article_id, title): 1})
+            # print(redis_client.zscore("article_rank_list", "article_id_1"))
+        else:
+            # 存在了但是这个文章
+            res_score = redis_client.zscore("article_rank_list", "article_%s_%s" % (article_id, title))
+            if res_score is None:
+                # 初始化分数
+                redis_client.zadd("article_rank_list", {"article_%s_%s" % (article_id, title): 1})
+            # 存在这个key的时候就分值增加 1
+            redis_client.zincrby("article_rank_list", 1, "article_%s_%s" % (article_id, title))
+        page_view = redis_client.zscore("article_rank_list", "article_%s_%s" % (article_id, title))
+        # return success_response(score)
+        # redis_client.incr('article_id:%s' % article_id)
+        # page_view = redis_client.get('article_id:%s' % article_id)
         data = {"title": article.title,
                 "desc": article.desc,
                 "content": article.content,
@@ -552,7 +577,8 @@ def update_article(article_id: str,
     desc = new_article.desc
     content = new_article.content
     category_id = new_article.category_id
-    article = Article.filter(Article.id == article_id, Article.user_id == current_user.uuid).first()
+    article = Article.filter(Article.id == article_id, Article.user_id == current_user.uuid,
+                             Article.is_delete == 0).first()
     if not article:
         return fail_response('此文章不存在')
     try:
@@ -560,6 +586,26 @@ def update_article(article_id: str,
                                update_time=str(datetime.now)).where(
             Article.id == article_id, Article.user_id == current_user.uuid)
         query.execute()
+        # 修改排行榜的标题
+        res = redis_client.exists("article_rank_list")
+        if not res:
+            # 连有序集合都没有的情况 初始化分数 0
+            redis_client.zadd("article_rank_list", {"article_%s_%s" % (article_id, title): 0})
+            # print(redis_client.zscore("article_rank_list", "article_id_1"))
+        else:
+            # 存在了但是这个文章
+            res_score = redis_client.zscore("article_rank_list", "article_%s_%s" % (article_id, title))
+            if res_score is None:
+                # 初始化分数
+                redis_client.zadd("article_rank_list", {"article_%s_%s" % (article_id, title): 0})
+            else:
+                # 删除之前的分数记录
+                redis_client.zrem("article_rank_list", "article_%s_%s" % (article_id, title))
+
+                # 重新建立一个并将之前的分数给这个
+                redis_client.zadd("article_rank_list", {"article_%s_%s" % (article_id, title): res_score})
+            # 存在这个key的时候就分值增加 1
+            redis_client.zincrby("article_rank_list", 1, "article_%s_%s" % (article_id, title))
         return success_response('更新博客文章成功')
     except Exception as e:
         db.rollback()
@@ -574,14 +620,28 @@ def delete_article(article_id: str,
     article = Article.filter(Article.id == article_id, Article.user_id == current_user.uuid).first()
     if not article:
         return fail_response('此文章不存在')
+    title = article.title
     try:
-        result = article.delete_instance()
+        # 之前这个是 物理删除
+        # result = article.delete_instance()
+        # 删除改为逻辑删除
+        query = Article.update(is_delete=True).where(
+            Article.id == article_id, Article.user_id == current_user.uuid)
+        result = query.execute()
+        # print(result, "运行后的结果")
         if result:
+            res = redis_client.exists("article_rank_list")
+            if res:
+                # 存在了但是这个文章
+                res_score = redis_client.zscore("article_rank_list", "article_%s_%s" % (article_id, title))
+                if res_score:
+                    # 删除之前的分数记录
+                    redis_client.zrem("article_rank_list", "article_%s_%s" % (article_id, title))
             return success_response('删除博客文章成功')
-        return fail_response('更新博客文章失败')
+        return fail_response('删除博客文章失败')
     except Exception as e:
         db.rollback()
-        logger.error(f'更新博客文章失败，失败原因：{e}')
+        logger.error(f'删除博客文章失败，失败原因：{e}')
         return fail_response('删除博客文章失败')
 
 
@@ -717,7 +777,7 @@ def update_comment(article_id: str,
     return success_response('博客文章评论修改成功！')
 
 
-@router.delete('/article/{article_id}/comment/{comment_id}', name="用户删除给某篇文章评论")
+@router.delete('/article/{article_id}/comment/{comment_id}', name="用户给某篇文章删除评论")
 @db.atomic()
 def delete_comment(article_id: str,
                    comment_id: str,
@@ -768,3 +828,46 @@ def reply_comment(create_comment: CreateComment,
         logger.error(f'评论回复失败，失败原因：{e}')
         return fail_response('评论回复失败')
     return success_response('评论回复成功！')
+
+
+@router.get('/backend/rank/article', name="获取排行榜文章列表")  # response_model=CustomResponse[ArticleList]
+def get_article_rank_list():
+    """
+    获取排行榜 有排行榜id  和 排行榜标题
+    :return:
+    """
+    try:
+        article_rank_list = []
+        # if not search:
+        #     articles = Article.select().order_by(Article.create_time.desc())
+        # else:
+        #     # 法二：
+        #     articles = Article.select().where(
+        #         Article.title.contains(search) |
+        #         Article.desc.contains(search) |
+        #         Article.content.contains(search)).order_by(Article.create_time.desc())
+
+        res = redis_client.exists("article_rank_list")
+        if not res:
+            # 初始化分数
+            return fail_response("暂时没有排行榜")
+        rank_list = redis_client.zrange("article_rank_list", 0, 4, desc=True, withscores=True)
+        # print(rank_list)
+        # res = Article.filter(Article.id == 1).first()
+        # print(res.id)
+        for article_key_val in rank_list:
+            # article = Article.filter(Article.id == article_key_val[0].decode('utf-8').split("_")[2]).first()
+            article_info = {
+                "article_id": int(article_key_val[0].decode('utf-8').split("_")[1]),
+                "article_title": article_key_val[0].decode('utf-8').split("_")[2],
+                "page_view": article_key_val[1]
+            }
+            article_rank_list.append(article_info)
+
+        # if len(article_rank_list) > 5:
+        #     article_rank_list = article_rank_list[:4]
+        return success_response(article_rank_list)
+    except Exception as e:
+        # print(e)
+        logger.error(f'获取文章列表失败，失败原因：{e}')
+        return fail_response('获取文章列表失败')

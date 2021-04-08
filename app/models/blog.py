@@ -111,6 +111,7 @@ class Article(Model):
     user_id = ForeignKeyField(User, null=True, backref='user')
     create_time = DateTimeField(default=datetime.datetime.now, verbose_name='创建时间')  # 发布时间
     update_time = DateTimeField(null=False, default=datetime.datetime.now, verbose_name='修改时间')
+    is_delete = BooleanField(default=False, verbose_name="是否删除")
 
     def save(self, *args, **kwargs):
         self.update_time = datetime.datetime.now()

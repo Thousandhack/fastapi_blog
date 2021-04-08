@@ -4,7 +4,7 @@
   "history": "migratehistory",
   "models": [
     "app.models.user.User",
-    "app.models.blog.Blog",
+    "app.models.blog.BlogSite",
     "app.models.blog.Category",
     "app.models.blog.Tag",
     "app.models.blog.Article",
